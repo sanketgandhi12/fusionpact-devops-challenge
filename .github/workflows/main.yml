@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: Basic CI Pipeline
 
 on:
   push:
@@ -7,152 +7,27 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-env:
-  REGISTRY: ghcr.io
-  BACKEND_IMAGE_NAME: ${{ github.repository }}-backend
-  FRONTEND_IMAGE_NAME: ${{ github.repository }}-frontend
-
 jobs:
-  test:
+  build-and-run:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-          cache: 'pip'
-
-      - name: Install dependencies
+      - name: Build and start containers
         run: |
-          cd backend
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
+          docker-compose build
+          docker-compose up -d
 
-      - name: Run tests with coverage
+      - name: Wait for services to start
+        run: sleep 10
+
+      - name: Check if services are running
         run: |
-          cd backend
-          python -m pytest tests/ --cov=app --cov-report=xml -v
+          # Check backend health
+          curl --fail http://localhost:8000/ || exit 1
+          # Check frontend availability
+          curl --fail -I http://localhost/ || exit 1
 
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./backend/coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: true
-          verbose: true
-
-  build-and-push:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata for backend
-        id: meta-backend
-        uses: docker/metadata-action@v4
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
-          tags: |
-            type=sha,format=long
-            type=ref,event=branch
-            latest
-
-      - name: Extract metadata for frontend
-        id: meta-frontend
-        uses: docker/metadata-action@v4
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
-          tags: |
-            type=sha,format=long
-            type=ref,event=branch
-            latest
-
-      - name: Build and push backend image
-        uses: docker/build-push-action@v4
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v4
-        with:
-          context: ./frontend
-          push: true
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    environment: production
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.0.0
-
-      - name: Deploy to AWS ECS
-        env:
-          TF_VAR_backend_image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
-          TF_VAR_frontend_image: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
-        run: |
-          cd infrastructure
-          terraform init
-          terraform validate
-          terraform plan
-          terraform apply -auto-approve
-
-      - name: Health check
-        run: |
-          # Wait for deployment to stabilize
-          sleep 30
-          # Get the load balancer URL from terraform output
-          APP_URL=$(terraform output -raw alb_dns_name)
-          # Check if the application is responding
-          curl --fail http://$APP_URL/health || exit 1
-
-  notify:
-    needs: [deploy]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Notify Slack
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - name: Stop containers
+        if: always()
+        run: docker-compose down
