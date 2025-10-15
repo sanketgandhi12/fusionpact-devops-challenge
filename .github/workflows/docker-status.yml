@@ -1,0 +1,93 @@
+name: Docker Compose Status
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Install Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose version
+
+      - name: Run Docker Compose and Capture Output
+        run: |
+          # Create output directory
+          mkdir -p _site
+
+          # Start Docker Compose
+          {
+            echo "# Docker Compose Status Report"
+            echo "Generated at: $(date)"
+            echo
+            echo "## Services Status"
+            echo
+            echo "### Building Services"
+            echo "\`\`\`"
+            docker-compose build
+            echo "\`\`\`"
+            echo
+            echo "### Starting Services"
+            echo "\`\`\`"
+            docker-compose up -d
+            docker-compose ps
+            echo "\`\`\`"
+            echo
+            echo "### Service Logs"
+            echo "\`\`\`"
+            docker-compose logs
+            echo "\`\`\`"
+            echo
+            echo "## Health Checks"
+            echo
+            echo "### Backend Status"
+            echo "\`\`\`"
+            curl -v http://localhost:8000/ || echo "Backend not responding"
+            echo "\`\`\`"
+            echo
+            echo "### Frontend Status"
+            echo "\`\`\`"
+            curl -v -I http://localhost:80/ || echo "Frontend not responding"
+            echo "\`\`\`"
+          } > _site/index.md
+
+          # Create Jekyll config
+          echo "theme: jekyll-theme-cayman" > _site/_config.yml
+
+      - name: Stop Docker Compose
+        if: always()
+        run: docker-compose down
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
