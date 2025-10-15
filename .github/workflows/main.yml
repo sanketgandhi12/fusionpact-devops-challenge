@@ -24,6 +24,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Docker Compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker-compose-plugin
+          docker compose version
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -36,19 +42,19 @@ jobs:
             echo
             echo "=== Docker Compose Build (Application) ==="
             echo
-            docker-compose build
+            docker compose build
             echo
             echo "=== Docker Compose Up (Application) ==="
             echo
-            docker-compose up -d
+            docker compose up -d
             echo
             echo "=== Application Container Status ==="
             echo
-            docker-compose ps
+            docker compose ps
             echo
             echo "=== Application Container Logs ==="
             echo
-            docker-compose logs
+            docker compose logs
             echo
             echo "=== Application Health Checks ==="
             echo
@@ -63,19 +69,19 @@ jobs:
             echo "=== Docker Compose Build (Monitoring) ==="
             echo
             cd monitoring
-            docker-compose build
+            docker compose build
             echo
             echo "=== Docker Compose Up (Monitoring) ==="
             echo
-            docker-compose up -d
+            docker compose up -d
             echo
             echo "=== Monitoring Container Status ==="
             echo
-            docker-compose ps
+            docker compose ps
             echo
             echo "=== Monitoring Container Logs ==="
             echo
-            docker-compose logs
+            docker compose logs
             echo
             echo "=== Monitoring Health Checks ==="
             echo
@@ -92,7 +98,11 @@ jobs:
 
       - name: Stop containers
         if: always()
-        run: docker-compose down
+        run: |
+          # Stop main application containers
+          docker compose down
+          # Stop monitoring containers
+          cd monitoring && docker compose down
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
