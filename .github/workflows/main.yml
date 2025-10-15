@@ -26,9 +26,10 @@ jobs:
 
       - name: Set up Docker Compose
         run: |
-          sudo apt-get update
-          sudo apt-get install -y docker-compose-plugin
-          docker compose version
+          # Install Docker Compose
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose version
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,19 +43,19 @@ jobs:
             echo
             echo "=== Docker Compose Build (Application) ==="
             echo
-            docker compose build
+            docker-compose build
             echo
             echo "=== Docker Compose Up (Application) ==="
             echo
-            docker compose up -d
+            docker-compose up -d
             echo
             echo "=== Application Container Status ==="
             echo
-            docker compose ps
+            docker-compose ps
             echo
             echo "=== Application Container Logs ==="
             echo
-            docker compose logs
+            docker-compose logs
             echo
             echo "=== Application Health Checks ==="
             echo
@@ -69,19 +70,19 @@ jobs:
             echo "=== Docker Compose Build (Monitoring) ==="
             echo
             cd monitoring
-            docker compose build
+            docker-compose build
             echo
             echo "=== Docker Compose Up (Monitoring) ==="
             echo
-            docker compose up -d
+            docker-compose up -d
             echo
             echo "=== Monitoring Container Status ==="
             echo
-            docker compose ps
+            docker-compose ps
             echo
             echo "=== Monitoring Container Logs ==="
             echo
-            docker compose logs
+            docker-compose logs
             echo
             echo "=== Monitoring Health Checks ==="
             echo
@@ -100,9 +101,9 @@ jobs:
         if: always()
         run: |
           # Stop main application containers
-          docker compose down
+          docker-compose down
           # Stop monitoring containers
-          cd monitoring && docker compose down
+          cd monitoring && docker-compose down
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
