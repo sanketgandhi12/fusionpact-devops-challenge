@@ -108,6 +108,30 @@ jobs:
             echo "\`\`\`" >> report.md
           }
 
+      - name: Copy frontend content
+        run: |
+          # Create site directory
+          mkdir -p _site
+          # Copy the frontend HTML file
+          cp frontend/Devops_Intern.html _site/index.html
+          # Copy any other frontend assets if they exist
+          if [ -d "frontend/assets" ]; then
+            cp -r frontend/assets _site/
+          fi
+
+      - name: Create status page
+        run: |
+          # Create a status directory
+          mkdir -p _site/status
+          # Move the Docker Compose report to status directory
+          mv report.md _site/status/index.md
+
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./_site
+          destination: ./_site
+
       - name: Stop containers
         if: always()
         run: |
@@ -115,12 +139,6 @@ jobs:
           docker-compose down
           # Stop monitoring containers
           cd monitoring && docker-compose down
-
-      - name: Build with Jekyll
-        uses: actions/jekyll-build-pages@v1
-        with:
-          source: ./
-          destination: ./_site
           
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
